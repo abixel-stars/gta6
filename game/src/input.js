@@ -1,53 +1,118 @@
-// Keyboard and pointer input. Held keys give a steering direction; one-shot presses (start or
-// restart, pause) are queued as bit flags and taken once by the loop, so a press between two
-// frames is never lost and never counted twice.
+// Keyboard and mouse state for Solmar. The game reads this each frame; the
+// shot stager can also inject synthetic keys for scripted sequences.
+export class Input {
+  constructor(canvas) {
+    this.keys = new Set();
+    this.pressed = new Set();
+    this.mouseDX = 0;
+    this.mouseDY = 0;
+    this.mouseDown = false;
+    this.mouseClicked = false;
+    this.wheel = 0;
+    this.locked = false;
+    this.canvas = canvas;
+    this._onKeyDown = (e) => {
+      if (e.repeat) return;
+      this.keys.add(e.code);
+      this.pressed.add(e.code);
+      if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) {
+        e.preventDefault();
+      }
+    };
+    this._onKeyUp = (e) => this.keys.delete(e.code);
+    this._onMouseMove = (e) => {
+      if (this.locked) {
+        this.mouseDX += e.movementX;
+        this.mouseDY += e.movementY;
+      }
+    };
+    this._onMouseDown = (e) => {
+      if (e.button === 0) {
+        this.mouseDown = true;
+        this.mouseClicked = true;
+      }
+    };
+    this._onMouseUp = (e) => {
+      if (e.button === 0) this.mouseDown = false;
+    };
+    this._onWheel = (e) => {
+      this.wheel += e.deltaY;
+    };
+    this._onLockChange = () => {
+      this.locked = document.pointerLockElement === this.canvas;
+    };
+    window.addEventListener('keydown', this._onKeyDown);
+    window.addEventListener('keyup', this._onKeyUp);
+    window.addEventListener('mousemove', this._onMouseMove);
+    window.addEventListener('mousedown', this._onMouseDown);
+    window.addEventListener('mouseup', this._onMouseUp);
+    window.addEventListener('wheel', this._onWheel, { passive: true });
+    document.addEventListener('pointerlockchange', this._onLockChange);
+    canvas.addEventListener('click', () => {
+      if (!this.locked && document.pointerLockElement !== canvas) {
+        canvas.requestPointerLock?.();
+      }
+    });
+  }
 
-export const ACTION_CONFIRM = 1;
-export const ACTION_PAUSE = 2;
+  down(code) {
+    return this.keys.has(code);
+  }
 
-const LEFT = new Set(['ArrowLeft', 'KeyA']);
-const RIGHT = new Set(['ArrowRight', 'KeyD']);
-const CONFIRM = new Set(['Space', 'Enter']);
-const PAUSE = new Set(['KeyP', 'Escape']);
+  // True only on the frame the key went down.
+  hit(code) {
+    return this.pressed.has(code);
+  }
 
-export function createInput(target) {
-  let left = false;
-  let right = false;
-  let actions = 0;
+  // Movement axes: -1..1 for forward and strafe.
+  moveAxis() {
+    let f = 0;
+    let s = 0;
+    if (this.down('KeyW') || this.down('ArrowUp')) f += 1;
+    if (this.down('KeyS') || this.down('ArrowDown')) f -= 1;
+    if (this.down('KeyD') || this.down('ArrowRight')) s += 1;
+    if (this.down('KeyA') || this.down('ArrowLeft')) s -= 1;
+    return { f, s };
+  }
 
-  window.addEventListener('keydown', (event) => {
-    if (LEFT.has(event.code)) left = true;
-    else if (RIGHT.has(event.code)) right = true;
-    else if (CONFIRM.has(event.code)) {
-      if (!event.repeat) actions |= ACTION_CONFIRM;
-    } else if (PAUSE.has(event.code)) {
-      if (!event.repeat) actions |= ACTION_PAUSE;
-    } else return;
-    event.preventDefault();
-  });
-  window.addEventListener('keyup', (event) => {
-    if (LEFT.has(event.code)) left = false;
-    else if (RIGHT.has(event.code)) right = false;
-  });
-  // A key released while the tab is hidden never sends keyup: let go of everything on blur.
-  window.addEventListener('blur', () => {
-    left = false;
-    right = false;
-  });
-  target.addEventListener('pointerdown', () => {
-    actions |= ACTION_CONFIRM;
-  });
+  // Driving axes: throttle -1..1, steer -1..1.
+  driveAxis() {
+    let throttle = 0;
+    if (this.down('KeyW') || this.down('ArrowUp')) throttle += 1;
+    if (this.down('KeyS') || this.down('ArrowDown')) throttle -= 1;
+    let steer = 0;
+    if (this.down('KeyA') || this.down('ArrowLeft')) steer += 1;
+    if (this.down('KeyD') || this.down('ArrowRight')) steer -= 1;
+    return { throttle, steer };
+  }
 
-  return {
-    /** -1 for left, 1 for right, 0 for neither or both. */
-    direction() {
-      return (right ? 1 : 0) - (left ? 1 : 0);
-    },
-    /** The one-shot presses since the last call, as ACTION_* flags. */
-    takeActions() {
-      const taken = actions;
-      actions = 0;
-      return taken;
-    },
-  };
+  consumeMouse() {
+    const dx = this.mouseDX;
+    const dy = this.mouseDY;
+    this.mouseDX = 0;
+    this.mouseDY = 0;
+    return { dx, dy };
+  }
+
+  consumeWheel() {
+    const w = this.wheel;
+    this.wheel = 0;
+    return w;
+  }
+
+  consumeClick() {
+    const c = this.mouseClicked;
+    this.mouseClicked = false;
+    return c;
+  }
+
+  endFrame() {
+    this.pressed.clear();
+  }
+
+  // Test hook: pretend a key is held, for scripted self-tests.
+  inject(code, held) {
+    if (held) this.keys.add(code);
+    else this.keys.delete(code);
+  }
 }

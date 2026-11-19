@@ -1,19 +1,99 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Block Dodger</title>
+<link rel="icon" href="data:,">
+<title>SOLMAR — Streets of the Sun</title>
 <style>
-  html, body { margin: 0; height: 100%; overflow: hidden; background: #11141b; }
-  #game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
-  /* Read aloud, never shown: the status line screen readers announce. */
-  #status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #101418; font-family: 'Segoe UI', Arial, sans-serif; }
+  #game { display: block; width: 100%; height: 100%; }
+  #hud { position: fixed; inset: 0; pointer-events: none; display: none; color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,.8); }
+  #topLeft { position: absolute; top: 14px; left: 16px; }
+  #stars { font-size: 26px; letter-spacing: 2px; }
+  #money { font-size: 24px; font-weight: 700; color: #7dff9a; margin-top: 2px; }
+  #healthBar { width: 190px; height: 12px; background: rgba(0,0,0,.55); border: 1px solid rgba(255,255,255,.5); border-radius: 6px; margin-top: 6px; overflow: hidden; }
+  #healthFill { height: 100%; width: 100%; background: #58c96b; }
+  #minimap { position: absolute; top: 14px; right: 16px; width: 200px; height: 200px; border: 2px solid rgba(255,255,255,.75); border-radius: 8px; background: #20262b; }
+  #objective { position: absolute; left: 50%; bottom: 92px; transform: translateX(-50%); background: rgba(0,0,0,.6); padding: 8px 18px; border-radius: 20px; font-size: 16px; font-weight: 600; white-space: nowrap; max-width: 90vw; overflow: hidden; text-overflow: ellipsis; }
+  #speed { position: absolute; right: 20px; bottom: 26px; font-size: 30px; font-weight: 800; }
+  #toast { position: absolute; top: 18%; left: 50%; transform: translateX(-50%); background: rgba(20,26,32,.85); border-left: 4px solid #ffd23e; padding: 10px 18px; border-radius: 6px; font-size: 16px; opacity: 0; transition: opacity .3s; max-width: 80vw; text-align: center; }
+  #crosshair { position: absolute; left: 50%; top: 50%; width: 18px; height: 18px; margin: -9px 0 0 -9px; display: none; }
+  #crosshair::before, #crosshair::after { content: ''; position: absolute; background: #fff; }
+  #crosshair::before { left: 8px; top: 0; width: 2px; height: 18px; }
+  #crosshair::after { left: 0; top: 8px; width: 18px; height: 2px; }
+  #vignette { position: fixed; inset: 0; pointer-events: none; background: radial-gradient(ellipse at center, transparent 55%, rgba(200,0,0,.55) 100%); opacity: 0; transition: opacity .15s; }
+  .menu { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; flex-direction: column; background: linear-gradient(160deg, rgba(10,16,24,.82), rgba(60,30,10,.75)); color: #fff; text-align: center; z-index: 10; }
+  .menu h1 { font-size: 84px; letter-spacing: 10px; color: #ffd23e; text-shadow: 0 4px 0 #b3541e, 0 8px 24px rgba(0,0,0,.6); }
+  .menu h2 { font-size: 30px; color: #ffd23e; margin-bottom: 10px; }
+  .menu .tagline { font-size: 20px; color: #ffe9a8; margin: 6px 0 18px; }
+  .menu p { max-width: 560px; font-size: 16px; line-height: 1.5; margin: 8px 0; }
+  .menu button { pointer-events: auto; margin: 10px 6px 0; padding: 12px 34px; font-size: 18px; font-weight: 700; border: none; border-radius: 8px; background: #ffd23e; color: #20242a; cursor: pointer; }
+  .menu button:hover { background: #ffe27a; }
+  .menu button.secondary { background: rgba(255,255,255,.16); color: #fff; border: 1px solid rgba(255,255,255,.5); }
+  .panel { display: none; margin-top: 14px; background: rgba(0,0,0,.6); border: 1px solid rgba(255,255,255,.3); border-radius: 10px; padding: 14px 20px; max-width: 620px; max-height: 46vh; overflow-y: auto; text-align: left; }
+  .panel label { display: block; margin: 8px 0; font-size: 15px; }
+  .panel select, .panel input[type=range] { margin-left: 8px; }
+  .mission-row { margin: 10px 0; font-size: 15px; line-height: 1.45; border-bottom: 1px solid rgba(255,255,255,.15); padding-bottom: 8px; }
+  #wasted { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; background: rgba(0,0,0,.55); color: #fff; font-size: 72px; font-weight: 900; letter-spacing: 12px; z-index: 20; text-shadow: 0 4px 30px rgba(0,0,0,.9); }
 </style>
+<script type="importmap">
+{ "imports": { "three": "./vendor/three.module.min.js" } }
+</script>
 </head>
 <body>
-<canvas id="game" aria-label="Block Dodger: move the paddle left and right to dodge falling blocks and catch coins"></canvas>
-<p id="status" role="status" aria-live="polite"></p>
+<canvas id="game"></canvas>
+<div id="vignette"></div>
+<div id="hud">
+  <div id="topLeft">
+    <div id="stars">☆☆☆☆☆</div>
+    <div id="money">$100</div>
+    <div id="healthBar"><div id="healthFill"></div></div>
+  </div>
+  <canvas id="minimap" width="200" height="200"></canvas>
+  <div id="objective">No active job.</div>
+  <div id="speed"></div>
+  <div id="toast"></div>
+  <div id="crosshair"></div>
+</div>
+<div id="menu" class="menu">
+  <div id="menuBody">
+    <h1 id="menuTitle">SOLMAR</h1>
+    <p class="tagline">Streets of the Sun — an open-world crime story</p>
+    <p>Leo Marin owes the Marea crew. Five jobs stand between him and freedom.
+    Steal cars, outrun the Solmar police, and finish the big score.</p>
+  </div>
+  <div>
+    <button id="menuPlay">Play</button>
+    <button id="menuHow" class="secondary">How to play</button>
+  </div>
+</div>
+<div id="pauseMenu" class="menu">
+  <h2>Paused</h2>
+  <div>
+    <button id="pauseResume">Resume</button>
+    <button id="pauseMissions" class="secondary">Missions</button>
+    <button id="pauseSettings" class="secondary">Settings</button>
+    <button id="pauseQuit" class="secondary">Quit to menu</button>
+  </div>
+  <div id="settingsPanel" class="panel">
+    <label>Volume <input id="volSlider" type="range" min="0" max="100" value="70"></label>
+    <label>Graphics
+      <select id="qualitySelect">
+        <option value="high" selected>High</option>
+        <option value="medium">Medium</option>
+        <option value="low">Low</option>
+      </select>
+    </label>
+    <button id="settingsClose">Close</button>
+  </div>
+  <div id="missionPanel" class="panel">
+    <div id="missionList"></div>
+    <button id="missionClose">Close</button>
+  </div>
+</div>
+<div id="wasted"></div>
 <script type="module" src="./src/main.js"></script>
 </body>
 </html>
