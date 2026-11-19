@@ -14,11 +14,14 @@ export class Hud {
       'menuPlay', 'menuHow', 'pauseMenu', 'pauseResume', 'pauseMissions',
       'pauseSettings', 'pauseQuit', 'settingsPanel', 'volSlider', 'qualitySelect',
       'settingsClose', 'missionPanel', 'missionList', 'missionClose', 'wasted',
+      'interactPrompt', 'dialog', 'dialogName', 'dialogLine',
+      'shopPanel', 'shopTitle', 'shopItems', 'shopMoney', 'shopClose',
     ]) {
       this.el[id] = document.getElementById(id);
     }
     this.mapCtx = this.el.minimap.getContext('2d');
     this.toastTimer = 0;
+    this.dialogTimer = 0;
     this.objectiveText = '';
     this.wireButtons();
   }
@@ -32,8 +35,59 @@ export class Hud {
     this.el.pauseQuit?.addEventListener('click', () => this.cb.onQuitToMenu());
     this.el.settingsClose?.addEventListener('click', () => this.hidePanels());
     this.el.missionClose?.addEventListener('click', () => this.hidePanels());
+    this.el.shopClose?.addEventListener('click', () => this.cb.onCloseShop?.());
+    this.el.shopItems?.addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-buy]');
+      if (btn) this.cb.onBuyShopItem?.(parseInt(btn.dataset.buy, 10));
+    });
     this.el.volSlider?.addEventListener('input', (e) => this.cb.onVolume(e.target.value / 100));
     this.el.qualitySelect?.addEventListener('change', (e) => this.cb.onQuality(e.target.value));
+  }
+
+  // The [E] prompt above the objective: what the nearest usable thing does.
+  setInteract(text) {
+    if (!this.el.interactPrompt) return;
+    if (text) {
+      this.el.interactPrompt.innerHTML = `<span class="key">E</span> ${text}`;
+      this.el.interactPrompt.style.display = 'block';
+    } else {
+      this.el.interactPrompt.style.display = 'none';
+    }
+  }
+
+  // A pedestrian's reply, shown as a speech bubble for a few seconds.
+  showDialog(name, line) {
+    if (!this.el.dialog) return;
+    this.el.dialogName.textContent = name;
+    this.el.dialogLine.textContent = line;
+    this.el.dialog.style.display = 'block';
+    this.dialogTimer = 4.5;
+  }
+
+  hideDialog() {
+    if (this.el.dialog) this.el.dialog.style.display = 'none';
+    this.dialogTimer = 0;
+  }
+
+  // Boardwalk shop: item list with prices; click or press 1/2/3 to buy.
+  showShop(shop, moneyNow) {
+    if (!this.el.shopPanel) return;
+    this.el.shopTitle.textContent = shop.name;
+    this.el.shopMoney.textContent = `Your cash: ${money(moneyNow)} — press 1/2/3 or click to buy, E or Esc to leave`;
+    this.el.shopItems.innerHTML = shop.items.map((it, i) => {
+      const effect = it.heal ? `+${it.heal} HP` : it.ammo ? `+${it.ammo} ammo` : '';
+      const afford = moneyNow >= it.price ? '' : ' disabled';
+      return `<button class="shop-item${afford}" data-buy="${i}"><b>${i + 1}. ${it.name}</b><span>${effect}</span><i>${money(it.price)}</i></button>`;
+    }).join('');
+    this.el.shopPanel.style.display = 'block';
+  }
+
+  hideShop() {
+    if (this.el.shopPanel) this.el.shopPanel.style.display = 'none';
+  }
+
+  shopVisible() {
+    return !!this.el.shopPanel && this.el.shopPanel.style.display === 'block';
   }
 
   showMenu() {
@@ -80,11 +134,12 @@ export class Hud {
   showHowToPlay() {
     this.el.menuBody.innerHTML = `
       <h2>How to play</h2>
-      <p><b>WASD</b> move / drive &nbsp; <b>Shift</b> sprint &nbsp; <b>E</b> enter or leave a car<br>
+      <p><b>WASD</b> move / drive &nbsp; <b>Shift</b> sprint &nbsp; <b>E</b> use: talk, pick up, shop, enter car<br>
       <b>F</b> punch &nbsp; <b>Mouse</b> aim, <b>Click</b> shoot &nbsp; <b>R</b> reload<br>
-      <b>Space</b> handbrake &nbsp; <b>P</b> pause &nbsp; <b>M</b> mute &nbsp; <b>Wheel</b> zoom camera</p>
+      <b>Space</b> handbrake &nbsp; <b>L</b> missions &nbsp; <b>P</b> pause &nbsp; <b>M</b> mute &nbsp; <b>Wheel</b> zoom camera</p>
       <p>Steal cars, take jobs from the depot, and watch the stars: the police
-      chase you when the heat is on. Lose them to cool off.</p>
+      chase you when the heat is on. Lose them to cool off. Walk up to people
+      and shops on the beach boardwalk — press E to talk, buy and pick things up.</p>
       <button id="howBack">Back</button>`;
     document.getElementById('howBack')?.addEventListener('click', () => this.showTitle());
   }
@@ -101,6 +156,13 @@ export class Hud {
     this.el.toast.textContent = text;
     this.el.toast.style.opacity = '1';
     this.toastTimer = 4;
+  }
+
+  // Hide the toast at once (used by the screenshot stager so the briefing
+  // does not cover the middle of a staged shot).
+  hideToast() {
+    this.el.toast.style.opacity = '0';
+    this.toastTimer = 0;
   }
 
   setObjective(text) {
@@ -139,6 +201,10 @@ export class Hud {
     if (this.toastTimer > 0) {
       this.toastTimer -= dt;
       if (this.toastTimer <= 0) this.el.toast.style.opacity = '0';
+    }
+    if (this.dialogTimer > 0) {
+      this.dialogTimer -= dt;
+      if (this.dialogTimer <= 0) this.hideDialog();
     }
     this.drawMinimap(state);
   }

@@ -17,6 +17,19 @@
   #healthFill { height: 100%; width: 100%; background: #58c96b; }
   #minimap { position: absolute; top: 14px; right: 16px; width: 200px; height: 200px; border: 2px solid rgba(255,255,255,.75); border-radius: 8px; background: #20262b; }
   #objective { position: absolute; left: 50%; bottom: 92px; transform: translateX(-50%); background: rgba(0,0,0,.6); padding: 8px 18px; border-radius: 20px; font-size: 16px; font-weight: 600; white-space: nowrap; max-width: 90vw; overflow: hidden; text-overflow: ellipsis; }
+  #interactPrompt { position: absolute; left: 50%; bottom: 148px; transform: translateX(-50%); background: rgba(20,26,32,.88); border: 1px solid rgba(255,210,62,.7); padding: 9px 18px; border-radius: 8px; font-size: 16px; font-weight: 600; display: none; white-space: nowrap; }
+  #interactPrompt .key { display: inline-block; background: #ffd23e; color: #20242a; font-weight: 800; padding: 2px 9px; border-radius: 5px; margin-right: 8px; }
+  #dialog { position: absolute; left: 50%; bottom: 210px; transform: translateX(-50%); background: rgba(255,250,235,.96); color: #20242a; text-shadow: none; padding: 12px 20px; border-radius: 12px; font-size: 16px; line-height: 1.4; display: none; max-width: 540px; text-align: center; border: 2px solid #ffd23e; }
+  #dialogName { font-weight: 800; color: #b3541e; }
+  #shopPanel { position: fixed; left: 50%; top: 50%; transform: translate(-50%,-50%); background: rgba(16,20,26,.96); border: 2px solid #ffd23e; border-radius: 12px; padding: 20px 24px; width: 460px; max-width: 92vw; color: #fff; z-index: 15; display: none; pointer-events: auto; }
+  #shopPanel h2 { color: #ffd23e; font-size: 26px; margin-bottom: 4px; }
+  #shopPanel p { font-size: 14px; color: #cfd4da; margin-bottom: 12px; }
+  .shop-item { display: flex; justify-content: space-between; align-items: center; gap: 10px; width: 100%; margin: 8px 0; padding: 11px 14px; font-size: 16px; background: rgba(255,255,255,.08); color: #fff; border: 1px solid rgba(255,255,255,.25); border-radius: 8px; cursor: pointer; text-align: left; }
+  .shop-item:hover { background: rgba(255,210,62,.2); }
+  .shop-item.disabled { opacity: .45; cursor: not-allowed; }
+  .shop-item span { color: #7dff9a; }
+  .shop-item i { color: #ffd23e; font-style: normal; font-weight: 700; }
+  #shopClose { margin-top: 10px; padding: 9px 22px; font-size: 15px; font-weight: 700; border: none; border-radius: 8px; background: #ffd23e; color: #20242a; cursor: pointer; }
   #speed { position: absolute; right: 20px; bottom: 26px; font-size: 30px; font-weight: 800; }
   #toast { position: absolute; top: 18%; left: 50%; transform: translateX(-50%); background: rgba(20,26,32,.85); border-left: 4px solid #ffd23e; padding: 10px 18px; border-radius: 6px; font-size: 16px; opacity: 0; transition: opacity .3s; max-width: 80vw; text-align: center; }
   #crosshair { position: absolute; left: 50%; top: 50%; width: 18px; height: 18px; margin: -9px 0 0 -9px; display: none; }
@@ -53,6 +66,8 @@
   </div>
   <canvas id="minimap" width="200" height="200"></canvas>
   <div id="objective">No active job.</div>
+  <div id="interactPrompt"></div>
+  <div id="dialog"><span id="dialogName"></span><br><span id="dialogLine"></span></div>
   <div id="speed"></div>
   <div id="toast"></div>
   <div id="crosshair"></div>
@@ -94,6 +109,12 @@
   </div>
 </div>
 <div id="wasted"></div>
+<div id="shopPanel">
+  <h2 id="shopTitle">Shop</h2>
+  <p id="shopMoney"></p>
+  <div id="shopItems"></div>
+  <button id="shopClose">Leave shop (E)</button>
+</div>
 <script type="module" src="./src/main.js"></script>
 </body>
 </html>

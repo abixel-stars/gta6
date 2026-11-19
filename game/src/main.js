@@ -7,6 +7,7 @@ import { Crowd } from './pedestrians.js';
 import { Police, Wanted } from './police.js';
 import { Combat, Health, punchHits, shotHits } from './combat.js';
 import { MissionManager, MISSIONS } from './missions.js';
+import { Interact } from './interact.js';
 import { Hud } from './hud.js';
 import { SoundBank } from './audio.js';
 import { Input } from './input.js';
@@ -135,10 +136,13 @@ export class Game {
       onQuitToMenu: () => this.quitToMenu(),
       onVolume: (v) => this.sound.setVolume(v),
       onQuality: (q) => this.setQuality(q),
+      onBuyShopItem: (i) => this.interact && this.interact.buy(i),
+      onCloseShop: () => this.interact && this.interact.closeShop(),
       completedMissions: () => this.missions.completed,
       activeMissionIndex: () => this.missions.activeIndex,
     });
     this.missions = new MissionManager(this);
+    this.interact = new Interact(this);
     this.state = 'menu'; // menu | playing | paused | wasted
     this.time = 0;
     this.cameraYaw = Math.PI;
@@ -146,8 +150,6 @@ export class Game {
     this.cameraDist = 8;
     this.bustProgress = 0;
     this.saveTimer = 0;
-    this.cashPickups = [];
-    this.spawnCash();
     this.spawnMissionCars();
     this.loadProgress();
     this.bindResize();
@@ -171,19 +173,6 @@ export class Game {
     sun.shadow.camera.far = 600;
     this.scene.add(sun);
     this.sun = sun;
-  }
-
-  spawnCash() {
-    const geo = new THREE.BoxGeometry(0.9, 0.08, 0.45);
-    const mat = new THREE.MeshLambertMaterial({ color: 0x4ac96b });
-    for (let i = 0; i < 8; i++) {
-      const m = new THREE.Mesh(geo, mat);
-      const x = rand(this.rng, -190, 190);
-      const z = rand(this.rng, -190, 190);
-      m.position.set(x, 0.6, z);
-      this.scene.add(m);
-      this.cashPickups.push({ mesh: m, x, z, amount: 20 + Math.floor(this.rng() * 4) * 10, taken: false });
-    }
   }
 
   spawnMissionCars() {
@@ -259,12 +248,14 @@ export class Game {
 
   quitToMenu() {
     this.saveGame();
+    this.interact.closeShop();
     this.state = 'menu';
     this.hud.showMenu();
     this.hud.showTitle();
   }
 
   togglePause() {
+    this.interact.closeShop();
     if (this.state === 'playing') {
       this.state = 'paused';
       this.hud.showPause();
@@ -296,6 +287,20 @@ export class Game {
       this.player.heading = Math.PI / 2;
       this.cameraYaw = Math.PI * 0.85;
       this.missions.start(0);
+      // Stage the new INTERACT system: a local to talk to and a pickup
+      // right beside the player, so the [E] prompt is on screen.
+      const ped = this.crowd.peds[0];
+      ped.pos.set(-21.2, 0, 21.2);
+      ped.target = { x: -21.2, z: 21.2 };
+      ped.pinned = true;
+      ped.heading = -Math.PI / 4;
+      ped.mesh.position.copy(ped.pos);
+      ped.mesh.rotation.y = ped.heading;
+      const pk = this.interact.pickups[0];
+      pk.x = -24;
+      pk.z = 24;
+      pk.mesh.position.set(-24, 0.6, 24);
+      this.hud.hideToast();
     } else if (shot === 'chase') {
       // Chase up the x=-22 road into downtown: the player speeds north in
       // the Cometa GT, a police roadblock waits ahead, live cruisers chase
@@ -303,7 +308,7 @@ export class Game {
       const gt = this.traffic.cars.find((c) => c.missionCar === 'sports') || this.traffic.spawnParked('sports', -22, 100, Math.PI);
       gt.pos.set(-22, 0, 100);
       gt.heading = Math.PI;
-      gt.speed = 26;
+      gt.speed = 38;
       gt.driver = 'player';
       this.player.car = gt;
       this.player.inCar = true;
@@ -311,21 +316,32 @@ export class Game {
       this.player.pos.copy(gt.pos);
       this.wanted.stars = 3;
       this.wanted.heat = 40;
-      this.traffic.spawnParked('cruiser', -22, 30, 0);
-      this.traffic.spawnParked('cruiser', -16, 34, 0.3);
+      // Roadblock ahead (in frame) and cruisers flanking the GT (in frame).
+      // NOTE: Vector3.set takes (x, y, z) — a 2-arg set leaves z stale and
+      // parks the cruiser at y=70 in the sky. Always pass all three.
+      this.traffic.spawnParked('cruiser', -22, 25, 0);
+      this.traffic.spawnParked('cruiser', -14, 31, 0.3);
       this.police.spawnCruiserNear(-22, 100);
       this.police.spawnCruiserNear(-22, 100);
-      this.police.cruisers[0].pos.set(-26, 128);
-      this.police.cruisers[1].pos.set(-18, 134);
+      this.police.cruisers[0].pos.set(-30, 0, 42);
+      this.police.cruisers[1].pos.set(-14, 0, 48);
       this.missions.start(3);
+      this.hud.hideToast();
       this.cameraYaw = Math.PI;
       this.cameraPitch = 0.45;
       this.cameraDist = 9;
     } else if (shot === 'harbor') {
-      this.player.pos.set(196, 0, -168);
-      this.player.heading = -Math.PI / 2;
-      this.cameraYaw = Math.PI * 0.4;
+      // Beach boardwalk at dusk: the new shops, umbrellas, palms, boats and
+      // the ocean behind them. Mission 3 (Harbor Lights) is the job on show.
+      // Player stands clear of the beach-road palms, looking south-east down
+      // the boardwalk so the clinic kiosk, the pier and the sea are in frame.
+      this.player.pos.set(-20, 0, 190);
+      this.player.heading = 0.3;
+      this.cameraYaw = 0.35;
+      this.cameraPitch = 0.4;
+      this.cameraDist = 10;
       this.missions.start(2);
+      this.hud.hideToast();
       // Dusk light for the harbor shot.
       this.scene.background = new THREE.Color(0xe8a06a);
       this.scene.fog = new THREE.Fog(0xe8a06a, 200, 650);
@@ -536,7 +552,8 @@ export class Game {
   update(dt) {
     const p = this.player;
     const input = this.input;
-    if (input.hit('KeyP') || input.hit('Escape')) this.togglePause();
+    if (input.hit('Escape') && this.interact.shopOpen) this.interact.closeShop();
+    else if (input.hit('KeyP') || input.hit('Escape')) this.togglePause();
     if (input.hit('KeyM')) this.sound.setMuted(!this.sound.muted);
     if (this.state !== 'playing') {
       // Menu backdrop: slow orbit around downtown.
@@ -547,10 +564,19 @@ export class Game {
         this.camera.lookAt(0, 10, 0);
         this.traffic.update(dt, null);
         this.crowd.update(dt);
+        this.city.update(dt, this.time);
       }
       return;
     }
     this.time += dt;
+    // Shopping freezes the world: only buying or leaving.
+    if (this.interact.shopOpen) {
+      if (input.hit('Digit1')) this.interact.buy(0);
+      if (input.hit('Digit2')) this.interact.buy(1);
+      if (input.hit('Digit3')) this.interact.buy(2);
+      if (input.hit('KeyE')) this.interact.closeShop();
+      return;
+    }
     // Player + car.
     if (p.inCar && p.car) {
       const d = input.driveAxis();
@@ -580,28 +606,21 @@ export class Game {
     }
     if (input.hit('KeyE')) {
       if (p.inCar) this.exitCar();
-      else this.tryEnterCar();
+      else if (!this.interact.use()) this.tryEnterCar();
     }
     if (input.hit('KeyJ')) {
       if (!this.missions.current) this.missions.startNext();
     }
-    // Cash pickups.
-    for (const c of this.cashPickups) {
-      if (c.taken) continue;
-      c.mesh.rotation.y += dt * 2;
-      c.mesh.position.y = 0.6 + Math.sin(this.time * 3 + c.x) * 0.15;
-      if (Math.hypot(p.pos.x - c.x, p.pos.z - c.z) < 1.6) {
-        c.taken = true;
-        c.mesh.visible = false;
-        p.money += c.amount;
-        this.effects.pickupSparkle(c.x, 1, c.z);
-        this.sound.pickup();
-        this.hud.showToast(`Picked up ${money(c.amount)}`);
-      }
+    if (input.hit('KeyL')) {
+      this.state = 'paused';
+      this.hud.showPause();
+      this.hud.showMissionList();
     }
     // World.
+    this.city.update(dt, this.time);
     this.traffic.update(dt, p.pos);
     this.crowd.update(dt);
+    this.interact.update(dt);
     this.police.syncCount(this.wanted.stars, p.pos);
     const nearestCop = this.police.nearestDist(p.pos.x, p.pos.z);
     this.wanted.update(dt, nearestCop);

@@ -99,6 +99,14 @@ export class MissionManager {
     this.beaconRing.rotation.x = -Math.PI / 2;
     this.beaconRing.visible = false;
     this.world.scene.add(this.beaconRing);
+    // Floating golden diamond above the target, so the job is visible from
+    // across the city even before the player opens the map.
+    this.beaconDiamond = new THREE.Mesh(
+      new THREE.OctahedronGeometry(1.5),
+      new THREE.MeshBasicMaterial({ color: 0xffd23e })
+    );
+    this.beaconDiamond.visible = false;
+    this.world.scene.add(this.beaconDiamond);
   }
 
   get current() {
@@ -154,9 +162,11 @@ export class MissionManager {
     const on = !!t;
     this.beacon.visible = on;
     this.beaconRing.visible = on;
+    this.beaconDiamond.visible = on;
     if (on) {
       this.beacon.position.set(t.x, 20, t.z);
       this.beaconRing.position.set(t.x, 0.35, t.z);
+      this.beaconDiamond.position.set(t.x, 12, t.z);
     }
   }
 
@@ -167,25 +177,28 @@ export class MissionManager {
     const w = this.world;
     const pos = w.player.inCar && w.player.car ? w.player.car.pos : w.player.pos;
     const d = Math.hypot(pos.x - step.target.x, pos.z - step.target.z);
-    // Pulse the beacon.
+    // Pulse the beacon and spin the diamond.
     if (this.beacon.visible) {
       this.beaconRing.scale.setScalar(1 + Math.sin(time * 3) * 0.15);
       this.beacon.material.opacity = 0.22 + Math.sin(time * 3) * 0.08;
+      this.beaconDiamond.rotation.y += dt * 2;
+      this.beaconDiamond.position.y = 12 + Math.sin(time * 2) * 1.2;
     }
+    const jobTag = `Job ${this.activeIndex + 1}/5 — `;
     // Step requirements.
     if (step.needCar) {
       const inRightCar =
         w.player.inCar && w.player.car && w.player.car.type === step.needCar;
       if (!inRightCar) {
-        w.hud.setObjective(`${step.text} (need a ${step.needCar === 'van' ? 'courier van' : 'Cometa GT'})`);
+        w.hud.setObjective(`${jobTag}${step.text} (need a ${step.needCar === 'van' ? 'courier van' : 'Cometa GT'})`);
         return null;
       }
     }
     if (step.needWantedBelow !== undefined && w.wanted.stars >= step.needWantedBelow) {
-      w.hud.setObjective(`${step.text} — wanted ${w.wanted.stars}★, lose the cops first`);
+      w.hud.setObjective(`${jobTag}${step.text} — wanted ${w.wanted.stars}★, lose the cops first`);
       return null;
     }
-    w.hud.setObjective(`${step.text} — ${Math.round(d)}m`);
+    w.hud.setObjective(`${jobTag}${step.text} — ${Math.round(d)}m`);
     if (d < step.radius) {
       this.stepIndex++;
       w.sound.pickup();
